@@ -1,0 +1,134 @@
+#include <Arduino.h>
+#include <ESP32Servo.h>
+
+// ===========================================
+//                 PINES
+// ===========================================
+#define TRIG_FRONT 14
+#define ECHO_FRONT 26
+#define TRIG_LEFT 25
+#define ECHO_LEFT 33
+#define TRIG_RIGHT 13
+#define ECHO_RIGHT 12
+
+// Motor trasero
+#define MOTOR_IN1 32
+#define MOTOR_IN2 35
+#define MOTOR_ENA 23
+
+// Servomotor
+#define SERVO_PIN 27
+
+// LED status
+#define LED_STATUS 2
+
+// ===========================================
+//                PARÁMETROS
+// ===========================================
+#define DISTANCIA_GIRO_CM 20   // L y R deben estar debajo de 20 cm
+#define SERVO_CENTRO 90
+#define SERVO_IZQ 50
+#define SERVO_DER 130
+#define TIEMPO_ESCANEO 2000     // CADA 2 SEGUNDOS
+
+// ===========================================
+Servo direccion;
+unsigned long ultimoScan = 0;
+
+// ===========================================
+//      FUNCIONES
+// ===========================================
+
+long medirDistancia(int trig, int echo) {
+  digitalWrite(trig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig, LOW);
+
+  long duracion = pulseIn(echo, HIGH, 20000);
+  long distancia = duracion * 0.034 / 2;
+
+  if (distancia == 0 || distancia > 400) return 400;
+  return distancia;
+}
+
+void motorAdelante() {
+  digitalWrite(MOTOR_IN1, HIGH);
+  digitalWrite(MOTOR_IN2, LOW);
+  digitalWrite(MOTOR_ENA, HIGH);
+}
+
+void motorDetener() {
+  digitalWrite(MOTOR_ENA, LOW);
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, LOW);
+}
+
+void girarCentro() { direccion.write(SERVO_CENTRO); }
+void girarIzquierda() { direccion.write(SERVO_IZQ); }
+void girarDerecha() { direccion.write(SERVO_DER); }
+
+// ===========================================
+//                SETUP
+// ===========================================
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(MOTOR_IN1, OUTPUT);
+  pinMode(MOTOR_IN2, OUTPUT);
+  pinMode(MOTOR_ENA, OUTPUT);
+
+  pinMode(TRIG_FRONT, OUTPUT);
+  pinMode(ECHO_FRONT, INPUT);
+  pinMode(TRIG_LEFT, OUTPUT);
+  pinMode(ECHO_LEFT, INPUT);
+  pinMode(TRIG_RIGHT, OUTPUT);
+  pinMode(ECHO_RIGHT, INPUT);
+
+  pinMode(LED_STATUS, OUTPUT);
+
+  direccion.attach(SERVO_PIN);
+
+  girarCentro();
+  motorAdelante();
+  ultimoScan = millis();
+}
+
+// ===========================================
+//                LOOP SIMPLE
+// ===========================================
+void loop() {
+
+  // Avanza siempre
+  motorAdelante();
+  girarCentro();
+
+  // Cada 2 segundos ESCANEA
+  if (millis() - ultimoScan >= TIEMPO_ESCANEO) {
+
+    long distL = medirDistancia(TRIG_LEFT, ECHO_LEFT);
+    long distR = medirDistancia(TRIG_RIGHT, ECHO_RIGHT);
+
+    Serial.printf("L: %ld cm | R: %ld cm\n", distL, distR);
+
+    // --- DECISIÓN ---
+    if (distL < DISTANCIA_GIRO_CM) {
+      Serial.println("GIRANDO A LA DERECHA (L < 20cm)");
+      girarDerecha();
+      delay(500);
+    }
+    else if (distR < DISTANCIA_GIRO_CM) {
+      Serial.println("GIRANDO A LA IZQUIERDA (R < 20cm)");
+      girarIzquierda();
+      delay(500);
+    }
+    else {
+      Serial.println("Camino libre, avanzando recto");
+    }
+
+    ultimoScan = millis();  // Reiniciar el temporizador
+  }
+
+  delay(20);
+}
